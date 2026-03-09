@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<input id="apiKey" placeholder="Ultravox API key">
+<button id="start">Start</button>
+<button id="stop">Stop</button>
+
+<script type="module">
+
+import { UltravoxSession } from "https://esm.sh/ultravox-client@0.3.6";
+
+let session;
+
+let hi = "You are a strict English-to-Tamil translation engine.Your ONLY task is to translate the given English input into Tamil.Rules (MUST FOLLOW STRICTLY):- Do NOT explain anything.- Do NOT add extra words.- Do NOT summarize.- Do NOT answer questions.- Do NOT change meaning.- Do NOT include notes, comments, or formatting.- Do NOT respond in English.- Output ONLY the Tamil translation.If the input is not in English, return it unchanged.Your response must contain ONLY the translated Tamil text and NOTHING ELSE"
+
+
+
+async function createCall(apiKey) {
+
+  const resp = await fetch("https://api.ultravox.ai/api/calls", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Unsafe-API-Key": apiKey
+    },
+    body: JSON.stringify({
+      systemPrompt: hi,
+      temperature: 0.0
+    })
+  });
+
+  return resp.json();
+}
+
+document.getElementById("start").onclick = async () => {
+
+  const apiKey = document.getElementById("apiKey").value;
+
+  const call = await createCall(apiKey);
+
+  session = new UltravoxSession();
+
+  session.addEventListener("status", () => {
+    console.log("status:", session.status);
+  });
+
+  await session.joinCall(call.joinUrl);
+
+};
+
+document.getElementById("stop").onclick = () => {
+  if(session) session.leaveCall();
+};
+
+</script>
+
+</body>
+</html>

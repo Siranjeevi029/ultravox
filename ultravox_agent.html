@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ultravox - Max Speed</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 min-h-screen py-8">
+  <div class="max-w-4xl mx-auto px-4">
+    <div class="bg-white rounded-lg shadow-lg p-6">
+      <!-- WARNING -->
+      <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+        <div class="ml-3">
+          <h3 class="text-sm text-yellow-800">DEVELOPMENT ONLY - API keys exposed</h3>
+        </div>
+      </div>
+      
+      <!-- MAIN LATENCY -->
+      <div class="bg-gradient-to-br from-green-600 to-blue-700 rounded-xl p-8 text-white mb-6">
+        <h2 class="text-center text-xl font-semibold mb-2">
+          <i class="fas fa-bolt mr-2"></i>Response Time
+        </h2>
+        <p class="text-center text-green-100 text-sm mb-6">thinking → speaking</p>
+        
+        <div class="text-center mb-6">
+          <div id="currentLatency" class="text-8xl font-bold">--</div>
+          <div class="text-2xl text-green-200">ms</div>
+        </div>
+        
+        <div class="grid grid-cols-4 gap-4 text-center">
+          <div class="bg-white/20 rounded-lg p-3">
+            <div class="text-xs text-green-100">Average</div>
+            <div id="avgLatency" class="text-2xl font-bold">--</div>
+          </div>
+          <div class="bg-white/20 rounded-lg p-3">
+            <div class="text-xs text-green-100">Best</div>
+            <div id="minLatency" class="text-2xl font-bold">--</div>
+          </div>
+          <div class="bg-white/20 rounded-lg p-3">
+            <div class="text-xs text-green-100">Worst</div>
+            <div id="maxLatency" class="text-2xl font-bold">--</div>
+          </div>
+          <div class="bg-white/20 rounded-lg p-3">
+            <div class="text-xs text-green-100">Turns</div>
+            <div id="responseCount" class="text-2xl font-bold">0</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Raw Events -->
+      <div class="bg-gray-900 rounded-lg p-4 text-green-400 font-mono text-xs mb-6">
+        <div class="flex justify-between items-center mb-2">
+          <span class="font-semibold">Events</span>
+          <button onclick="document.getElementById('debugLog').innerHTML=''" class="text-gray-400 hover:text-white">Clear</button>
+        </div>
+        <div id="debugLog" class="h-40 overflow-y-auto"></div>
+      </div>
+      
+      <!-- Controls -->
+      <div class="space-y-4">
+        <input type="password" id="apiKey" class="w-full px-3 py-2 border rounded-md" placeholder="Ultravox API Key">
+        <textarea id="systemPrompt" rows="2" class="w-full px-3 py-2 border rounded-md">You are a helpful assistant. Respond immediately.</textarea>
+        <div class="flex gap-3">
+          <button id="startCall" class="flex-1 px-4 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium">
+            <i class="fas fa-phone mr-2"></i>Start
+          </button>
+          <button id="endCall" class="flex-1 px-4 py-3 bg-red-600 text-white rounded-md hover:bg-red-700 font-medium">
+            <i class="fas fa-phone-slash mr-2"></i>End
+          </button>
+          <button id="resetMetrics" class="px-4 py-3 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">
+            <i class="fas fa-redo"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script type="module">
+    import { UltravoxSession } from 'https://esm.sh/ultravox-client@0.3.6';
+    
+    let uvSession = null;
+    
+    const Metrics = {
+      measurements: [],
+      thinkingStart: null,
+      
+      log(msg) {
+        const debugLog = document.getElementById('debugLog');
+        const time = new Date().toLocaleTimeString('en-US', {hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit', fractionalSecondDigits:3});
+        const entry = document.createElement('div');
+        entry.textContent = `[${time}] ${msg}`;
+        debugLog.appendChild(entry);
+        debugLog.scrollTop = debugLog.scrollHeight;
+        console.log(msg);
+      },
+      
+      reset() {
+        this.measurements = [];
+        this.thinkingStart = null;
+        this.updateDisplay();
+        this.log('=== RESET ===');
+      },
+      
+      onStatus(status) {
+        const now = performance.now();
+        this.log(`Status: ${status}`);
+        
+        // When AI starts thinking - mark start time
+        if (status === 'thinking') {
+          this.thinkingStart = now;
+          this.log('→ THINKING START');
+        }
+        
+        // When AI starts speaking - calculate latency from thinking
+        if (status === 'speaking' && this.thinkingStart) {
+          const latency = now - this.thinkingStart;
+          this.measurements.push(latency);
+          this.log(`✅ LATENCY: ${latency.toFixed(0)}ms`);
+          this.thinkingStart = null;
+          this.updateDisplay();
+        }
+      },
+      
+      updateDisplay() {
+        const {measurements} = this;
+        
+        const last = measurements.length > 0 ? measurements[measurements.length - 1] : null;
+        document.getElementById('currentLatency').textContent = last ? last.toFixed(0) : '--';
+        
+        if (measurements.length > 0) {
+          const avg = measurements.reduce((a,b) => a+b, 0) / measurements.length;
+          document.getElementById('avgLatency').textContent = avg.toFixed(0);
+          document.getElementById('minLatency').textContent = Math.min(...measurements).toFixed(0);
+          document.getElementById('maxLatency').textContent = Math.max(...measurements).toFixed(0);
+        } else {
+          document.getElementById('avgLatency').textContent = '--';
+          document.getElementById('minLatency').textContent = '--';
+          document.getElementById('maxLatency').textContent = '--';
+        }
+        
+        document.getElementById('responseCount').textContent = measurements.length;
+      }
+    };
+    
+    async function createCall(apiKey, systemPrompt) {
+      const resp = await fetch('https://api.ultravox.ai/api/calls', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Unsafe-API-Key': apiKey},
+        body: JSON.stringify({systemPrompt})  // Default model - max speed
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.json();
+    }
+    
+    document.getElementById('startCall').onclick = async () => {
+      const apiKey = document.getElementById('apiKey').value;
+      const systemPrompt = document.getElementById('systemPrompt').value || 'You are a helpful assistant.';
+      
+      if (!apiKey) { alert('Enter API key'); return; }
+      
+      if (uvSession) uvSession.leaveCall();
+      Metrics.reset();
+      
+      uvSession = new UltravoxSession();
+      uvSession.addEventListener('status', () => Metrics.onStatus(uvSession.status));
+      
+      try {
+        Metrics.log('Creating call...');
+        const data = await createCall(apiKey, systemPrompt);
+        Metrics.log('Joining...');
+        uvSession.joinCall(data.joinUrl);
+      } catch (e) {
+        Metrics.log(`Error: ${e.message}`);
+      }
+    };
+    
+    document.getElementById('endCall').onclick = () => {
+      if (uvSession) uvSession.leaveCall();
+    };
+    
+    document.getElementById('resetMetrics').onclick = () => Metrics.reset();
+  </script>
+</body>
+</html>
